@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { CloudSyncModal } from '../Common/CloudSyncModal';
 import { 
   ShieldCheck, 
   Users, 
@@ -40,7 +41,8 @@ import {
   AlertCircle,
   Award,
   Trash2,
-  Tag
+  Tag,
+  Cloud
 } from 'lucide-react';
 
 export const AdminHome = () => {
@@ -78,6 +80,7 @@ export const AdminHome = () => {
 
   // Active Admin Tab
   const [adminTab, setAdminTab] = useState('command'); // 'command', 'users', 'lots', 'offers', 'farmers', 'buyers', 'transport', 'orders', 'grievances', 'feed'
+  const [isCloudSyncModalOpen, setIsCloudSyncModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('all');
   const [userSearchText, setUserSearchText] = useState('');
@@ -855,7 +858,27 @@ export const AdminHome = () => {
                 </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  onClick={() => setIsCloudSyncModalOpen(true)}
+                  style={{
+                    background: '#047857',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(4, 120, 87, 0.25)'
+                  }}
+                >
+                  <Cloud size={14} color="#86efac" />
+                  <span>Netlify & Cloud Sync Control</span>
+                </button>
                 <span style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', padding: '4px 10px', borderRadius: '6px', fontSize: '0.76rem', fontWeight: 700 }}>
                   Server Uptime: {systemMetrics.serverUptime}
                 </span>
@@ -867,6 +890,7 @@ export const AdminHome = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
               {[
+                { title: 'Netlify Cloud Multi-Device Sync', node: 'Netlify Blobs + Realtime Cloud', status: '🟢 Active & Synced', latency: '14ms', load: '0ms SSE' },
                 { title: 'Frontend Web Portal', node: 'React 19 + Vite HMR', status: '🟢 Operational', latency: '28ms', load: '14% CPU' },
                 { title: 'AI Price Forecasting (LSTM)', node: 'AgriPredict™ Multi-Variable', status: '🟢 Operational', latency: '44ms', load: '32% GPU' },
                 { title: 'Quality Scanner (Vision)', node: 'YOLOv8 + AGMARKNET Engine', status: '🟢 Operational', latency: '65ms', load: '41% GPU' },
@@ -3403,6 +3427,11 @@ export const AdminHome = () => {
           </div>
         </div>
       )}
+      {/* Cloud & Multi-Device Sync Modal */}
+      <CloudSyncModal 
+        isOpen={isCloudSyncModalOpen} 
+        onClose={() => setIsCloudSyncModalOpen(false)} 
+      />
     </div>
   );
 };

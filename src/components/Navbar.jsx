@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp, DEMO_STAKEHOLDERS } from '../context/AppContext';
+import { CloudSyncModal } from './Common/CloudSyncModal';
 import { 
   Sprout, 
   Languages, 
@@ -32,11 +33,14 @@ export const Navbar = () => {
     notifications,
     setIsAuthModalOpen,
     setAuthDefaultRole,
-    openAuthModal
+    openAuthModal,
+    syncStatus,
+    loadServerData
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isRoleSwitchOpen, setIsRoleSwitchOpen] = useState(false);
+  const [isCloudSyncModalOpen, setIsCloudSyncModalOpen] = useState(false);
   const unreadNotifs = notifications.filter(n => n.unread).length;
 
   const roleConfig = {
@@ -74,6 +78,33 @@ export const Navbar = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div 
+            title="Live Multi-Device Cloud Sync Status. Click to configure cloud database or view diagnostics."
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              background: syncStatus === 'synced' ? 'rgba(34, 197, 94, 0.18)' : 'rgba(234, 179, 8, 0.2)', 
+              border: `1px solid ${syncStatus === 'synced' ? 'rgba(74, 222, 128, 0.4)' : 'rgba(250, 204, 21, 0.4)'}`,
+              padding: '2px 10px', 
+              borderRadius: '999px',
+              fontSize: '0.72rem',
+              color: syncStatus === 'synced' ? '#86efac' : '#fde047',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            onClick={() => setIsCloudSyncModalOpen(true)}
+          >
+            <span style={{ 
+              width: '7px', 
+              height: '7px', 
+              borderRadius: '50%', 
+              background: syncStatus === 'synced' ? '#4ade80' : '#facc15',
+              boxShadow: syncStatus === 'synced' ? '0 0 6px #4ade80' : 'none'
+            }} />
+            <span>{syncStatus === 'synced' ? 'Live Cloud Sync: Connected' : 'Sync: Connecting...'}</span>
+          </div>
+
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#cbd5e1' }}>
             <PhoneCall size={13} color="#4ade80" />
             <span>{t('kisanHelpline')}: <strong>1800-233-0244</strong> ({t('tollFree')})</span>
@@ -422,6 +453,12 @@ export const Navbar = () => {
           )}
         </div>
       </div>
+
+      {/* Cloud & Multi-Device Sync Modal */}
+      <CloudSyncModal 
+        isOpen={isCloudSyncModalOpen} 
+        onClose={() => setIsCloudSyncModalOpen(false)} 
+      />
     </header>
   );
 };

@@ -14,6 +14,7 @@ import {
   CROPS_CATALOG
 } from '../mockData';
 import { translations } from '../translations';
+import { apiService, subscribeToBroadcast } from '../services/apiService';
 
 const AppContext = createContext();
 
@@ -120,11 +121,23 @@ export const INITIAL_REGISTERED_USERS = [
 export const isUserLot = (lot, user) => {
   if (!lot || !user) return false;
   if (user.role === 'admin') return true;
+  
+  // 1. Check user email match (crucial for multi-device sync with same email)
+  const userEmail = (user.email || '').toLowerCase().trim();
+  const lotEmail = (lot.farmerEmail || '').toLowerCase().trim();
+  if (userEmail && lotEmail && userEmail === lotEmail) return true;
+
+  // 2. Check clean 10-digit phone match
   const userPhoneClean = user.phone ? user.phone.replace(/[^0-9]/g, '').slice(-10) : '';
   const lotPhoneClean = lot.farmerPhone ? lot.farmerPhone.replace(/[^0-9]/g, '').slice(-10) : '';
   if (userPhoneClean && lotPhoneClean && userPhoneClean === lotPhoneClean) return true;
+
+  // 3. Check ID match
   if (user.id && lot.farmerId && user.id === lot.farmerId) return true;
+
+  // 4. Check name match
   if (user.name && lot.farmerName && user.name.toLowerCase().trim() === lot.farmerName.toLowerCase().trim()) return true;
+
   return false;
 };
 
@@ -520,6 +533,175 @@ export const AppProvider = ({ children }) => {
     } catch (e) {}
   }, [fleetVehicles]);
 
+  // Live Multi-Device Sync Engine State
+  const [syncStatus, setSyncStatus] = useState('connecting'); // 'connecting' | 'synced' | 'offline'
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+
+  // Initial Data Hydration & Background Sync from Central Server API
+  const loadServerData = async () => {
+    try {
+      const serverData = await apiService.fetchData();
+      if (serverData) {
+        if (Array.isArray(serverData.lots) && serverData.lots.length > 0) {
+          setLots(prevLots => {
+            const map = new Map();
+            serverData.lots.forEach(l => { if (l && l.id) map.set(l.id, l); });
+            // Keep any local-only lots not yet in server
+            prevLots.forEach(l => {
+              if (l && l.id && !map.has(l.id)) {
+                map.set(l.id, l);
+                apiService.saveLot(l); // sync upstream
+              }
+            });
+            return Array.from(map.values());
+          });
+        }
+        if (Array.isArray(serverData.registeredUsers) && serverData.registeredUsers.length > 0) {
+          setRegisteredUsers(prevUsers => {
+            const map = new Map();
+            serverData.registeredUsers.forEach(u => { if (u && u.id) map.set(u.id, u); });
+            prevUsers.forEach(u => {
+              if (u && u.id && !map.has(u.id)) {
+                map.set(u.id, u);
+                apiService.saveUser(u);
+              }
+            });
+            return Array.from(map.values());
+          });
+        }
+        if (Array.isArray(serverData.offers)) {
+          setOffers(serverData.offers);
+        }
+        if (Array.isArray(serverData.orders)) {
+          setOrders(serverData.orders);
+        }
+        if (Array.isArray(serverData.transactions)) {
+          setTransactions(serverData.transactions);
+        }
+        if (Array.isArray(serverData.activity)) {
+          setLiveActivityFeed(serverData.activity);
+        }
+        setSyncStatus('synced');
+        setLastSyncTime(new Date());
+      } else {
+        setSyncStatus('offline');
+      }
+    } catch (err) {
+      console.warn('Central server sync warning:', err);
+      setSyncStatus('offline');
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    // 1. Initial Load
+    loadServerData();
+
+    // 2. Cross-tab instant broadcast listener
+    const unsubscribe = subscribeToBroadcast((msg) => {
+      if (!isMounted) return;
+      if (msg.type === 'LOT_UPDATED' && msg.payload) {
+        setLots(prev => {
+          const idx = prev.findIndex(l => l.id === msg.payload.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = msg.payload;
+            return next;
+          }
+          return [msg.payload, ...prev];
+        });
+      } else if (msg.type === 'LOT_DELETED' && msg.payload) {
+        setLots(prev => prev.filter(l => l.id !== msg.payload.lotId));
+      } else if (msg.type === 'OFFER_UPDATED' && msg.payload) {
+        setOffers(prev => {
+          const idx = prev.findIndex(o => o.id === msg.payload.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = msg.payload;
+            return next;
+          }
+          return [msg.payload, ...prev];
+        });
+      } else if (msg.type === 'ORDER_UPDATED' && msg.payload) {
+        setOrders(prev => {
+          const idx = prev.findIndex(o => o.id === msg.payload.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = msg.payload;
+            return next;
+          }
+          return [msg.payload, ...prev];
+        });
+      } else if (msg.type === 'USER_UPDATED' && msg.payload) {
+        setRegisteredUsers(prev => {
+          const idx = prev.findIndex(u => u.id === msg.payload.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = msg.payload;
+            return next;
+          }
+          return [msg.payload, ...prev];
+        });
+      }
+      setLastSyncTime(new Date());
+      setSyncStatus('synced');
+    });
+
+    // 3. Periodic Background Sync (every 3.5 seconds) to pull updates from other laptops/devices
+    const syncInterval = setInterval(async () => {
+      try {
+        const serverData = await apiService.fetchData();
+        if (serverData && isMounted) {
+          if (Array.isArray(serverData.lots)) {
+            setLots(prevLots => {
+              const prevStr = JSON.stringify(prevLots.map(l => ({ id: l.id, status: l.status, price: l.expectedPrice })));
+              const serverStr = JSON.stringify(serverData.lots.map(l => ({ id: l.id, status: l.status, price: l.expectedPrice })));
+              return prevStr !== serverStr ? serverData.lots : prevLots;
+            });
+          }
+          if (Array.isArray(serverData.offers)) {
+            setOffers(prevOffers => {
+              const prevStr = JSON.stringify(prevOffers.map(o => ({ id: o.id, status: o.status })));
+              const serverStr = JSON.stringify(serverData.offers.map(o => ({ id: o.id, status: o.status })));
+              return prevStr !== serverStr ? serverData.offers : prevOffers;
+            });
+          }
+          if (Array.isArray(serverData.orders)) {
+            setOrders(prevOrders => {
+              const prevStr = JSON.stringify(prevOrders.map(o => ({ id: o.id, status: o.status, step: o.timelineStep })));
+              const serverStr = JSON.stringify(serverData.orders.map(o => ({ id: o.id, status: o.status, step: o.timelineStep })));
+              return prevStr !== serverStr ? serverData.orders : prevOrders;
+            });
+          }
+          if (Array.isArray(serverData.registeredUsers)) {
+            setRegisteredUsers(prevUsers => {
+              if (prevUsers.length !== serverData.registeredUsers.length) {
+                return serverData.registeredUsers;
+              }
+              return prevUsers;
+            });
+          }
+          setSyncStatus('synced');
+          setLastSyncTime(new Date());
+        }
+      } catch {
+        // network hiccup
+      }
+    }, 3500);
+
+    // 4. Focus trigger: when tab on Laptop 2 is activated/clicked
+    const handleFocus = () => loadServerData();
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   const setLang = (newLang) => {
     setLangState(newLang);
     try {
@@ -640,6 +822,7 @@ export const AppProvider = ({ children }) => {
       }
 
       setCurrentUser(userToLogin);
+      apiService.saveUser(userToLogin);
       setActiveTab('home');
       setIsAuthModalOpen(false);
       pushActivity(`Admin ${userToLogin.name} signed into Master Control Console`, 'auth');
@@ -686,6 +869,7 @@ export const AppProvider = ({ children }) => {
     }
 
     setCurrentUser(userToLogin);
+    apiService.saveUser(userToLogin);
     setActiveTab('home');
     setIsAuthModalOpen(false);
 
@@ -789,6 +973,7 @@ export const AppProvider = ({ children }) => {
 
     setRegisteredUsers(prev => [newUser, ...prev]);
     setCurrentUser(newUser);
+    apiService.saveUser(newUser);
     setActiveTab('home');
     setIsAuthModalOpen(false);
 
@@ -827,6 +1012,7 @@ export const AppProvider = ({ children }) => {
       farmerId: currentUser ? currentUser.id : "FARMER-001",
       farmerName: currentUser ? currentUser.name : "Ramesh Patil",
       farmerPhone: currentUser ? currentUser.phone : "+91 98220 14892",
+      farmerEmail: (currentUser?.email || '').toLowerCase().trim() || 'ramesh.patil@sahyadrifpo.org',
       farmerFpo: currentUser ? currentUser.organization : "Sahyadri Farmers Producer Co.",
       location: lotData.location || "Haveli, Pune, Maharashtra",
       district: lotData.district || "pune",
@@ -853,6 +1039,7 @@ export const AppProvider = ({ children }) => {
     };
 
     setLots(prev => [newLot, ...prev]);
+    apiService.saveLot(newLot); // Immediately persist to central backend & notify all devices
     pushActivity(`${newLot.farmerName} published new lot #${newLotId} (${newLot.quantity} KG ${newLot.crop} - ${newLot.category})`, 'lot');
 
     showConfirmation(
@@ -909,6 +1096,11 @@ export const AppProvider = ({ children }) => {
 
     setOffers(prev => [newOffer, ...prev]);
     setLots(prev => prev.map(l => l.id === offerData.lotId ? { ...l, status: "Offers Received" } : l));
+
+    apiService.saveOffer(newOffer);
+    if (targetLot) {
+      apiService.saveLot({ ...targetLot, status: "Offers Received" });
+    }
 
     pushActivity(`${newOffer.buyerName} placed an offer of ₹${newOffer.offeredRate}/KG on Lot #${newOffer.lotId} (${targetLot?.crop || 'Produce'})`, 'offer');
 
@@ -1018,6 +1210,13 @@ export const AppProvider = ({ children }) => {
     };
 
     setTransactions(prev => [newTxn, ...prev]);
+
+    apiService.saveOrder(newOrder);
+    apiService.saveTransaction(newTxn);
+    apiService.saveOffer({ ...offer, status: "Accepted", paymentStatus: "Payment Pending", logisticsStatus: "Awaiting Farmer Payment" });
+    if (targetLot) {
+      apiService.saveLot({ ...targetLot, status: "Deal Locked" });
+    }
 
     try {
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
@@ -1676,6 +1875,7 @@ export const AppProvider = ({ children }) => {
     setLots(prev => prev.filter(l => l.id !== lotId));
     // Also remove any offers associated with this lot
     setOffers(prev => prev.filter(o => o.lotId !== lotId));
+    apiService.deleteLot(lotId);
 
     pushActivity(`🔴 Administrator DELETED Crop Lot #${lotId} (${lotDesc})`, 'lot');
     pushNotification(
@@ -2376,7 +2576,11 @@ export const AppProvider = ({ children }) => {
         isRateModalOpen,
         setIsRateModalOpen,
         ratedTxn,
-        setRatedTxn
+        setRatedTxn,
+        // Live Multi-Device Sync
+        syncStatus,
+        lastSyncTime,
+        loadServerData
       }}
     >
       {children}
