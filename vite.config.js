@@ -34,6 +34,10 @@ export default defineConfig({
         target: 'https://www.fast2sms.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/fast2sms/, '')
+      },
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
       }
     }
   }
