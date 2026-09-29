@@ -63,6 +63,8 @@ export const INITIAL_LOTS = [
       "https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&auto=format&fit=crop&q=80",
       "https://images.unsplash.com/photo-1580201092675-a0a6a6cafbb1?w=600&auto=format&fit=crop&q=80"
     ],
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-farmer-hands-holding-fresh-red-tomatoes-42994-large.mp4",
+    videoDuration: 45,
     qualityScore: 94,
     freshness: "96%",
     damagePercent: 2.1,
@@ -97,6 +99,8 @@ export const INITIAL_LOTS = [
       "https://images.unsplash.com/photo-1582284540020-8acbe03f4924?w=600&auto=format&fit=crop&q=80",
       "https://images.unsplash.com/photo-1561136594-7f68413baa99?w=600&auto=format&fit=crop&q=80"
     ],
+    videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-hands-holding-freshly-harvested-ripe-tomatoes-42995-large.mp4",
+    videoDuration: 52,
     qualityScore: 91,
     freshness: "94%",
     damagePercent: 3.2,

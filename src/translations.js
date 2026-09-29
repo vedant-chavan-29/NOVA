@@ -121,7 +121,7 @@ export const translations = {
     // Auth & Accounts
     welcomeBack: "Welcome Back",
     loginSubtitle: "Sign in to access your role-specific dashboard",
-    emailOrPhone: "Mobile Number / Email Address",
+    emailOrPhone: "Mobile Number",
     password: "Password",
     loginBtn: "Login to Portal",
     createAccountBtn: "Create New Account",
@@ -178,11 +178,8 @@ export const translations = {
     allCategories: "All Categories",
     enterCustomCrop: "Enter Custom Produce Name",
     customCropNote: "No limit — you can enter any fruit, vegetable, or crop manually.",
-    photo1Label: "Photo 1: Overall Harvest & Batch View",
-    photo2Label: "Photo 2: Surface & Skin Inspection",
-    photo3Label: "Photo 3: Caliber / Sizing Measurement",
-    photo4Label: "Photo 4: Cross-section / Internal Core",
-    aiGradingResults: "AI Multi-Angle Quality Grading Results",
+    videoRecordingLabel: "Live Video Stream Recording (Min 30s • Max 2min)",
+    aiGradingResults: "Live Video AI Quality Grading Results",
     bookColdStorageTransport: "Book Transport to Cold Storage",
     transportForColdStorage: "Cold Storage Logistics & Farm-Gate Transport",
 
@@ -380,7 +377,7 @@ export const translations = {
     // Auth & Accounts
     welcomeBack: "पुन्हा स्वागत आहे",
     loginSubtitle: "आपल्या डॅशबोर्डवर जाण्यासाठी लॉगिन करा",
-    emailOrPhone: "मोबाईल नंबर / ईमेल आयडी",
+    emailOrPhone: "मोबाईल नंबर",
     password: "पासवर्ड",
     loginBtn: "पोर्टलमध्ये प्रवेश करा",
     createAccountBtn: "नवीन खाते तयार करा",
@@ -639,7 +636,7 @@ export const translations = {
     // Auth & Accounts
     welcomeBack: "पुनः स्वागत है",
     loginSubtitle: "अपने भूमिका-विशिष्ट डैशबोर्ड में जाने के लिए लॉगिन करें",
-    emailOrPhone: "मोबाइल नंबर / ईमेल पता",
+    emailOrPhone: "मोबाइल नंबर",
     password: "पासवर्ड",
     loginBtn: "पोर्टल में लॉगिन करें",
     createAccountBtn: "नया खाता बनाएं",

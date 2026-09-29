@@ -281,6 +281,33 @@ export const BuyerMarketplace = () => {
                   </span>
                 </div>
 
+                {/* Farmer Video Indicator Strip */}
+                {lot.videoUrl && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenOfferModal(lot)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: '#f0fdf4',
+                        border: '1.5px solid #86efac',
+                        color: '#15803d',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>🎥 Farmer Recorded Video Stream ({lot.videoDuration || 30}s) — Click to View & Place Offer</span>
+                    </button>
+                  </div>
+                )}
+
                 {/* 4-Photo Multi-Angle Inspection Strip for Buyer */}
                 <div style={{ marginBottom: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -408,21 +435,29 @@ export const BuyerMarketplace = () => {
                   Buyer Produce Inspection • {inspectedLot.category}
                 </span>
                 <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', margin: '4px 0 0' }}>
-                  {inspectedLot.crop} ({inspectedLot.variety}) — 4-Angle AI Inspection Photos
+                  {inspectedLot.crop} ({inspectedLot.variety}) — Live Video AI Inspection Stream
                 </h3>
               </div>
-              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                Photo {inspectedPhotoIndex + 1} of 4
+              <span className="badge badge-green" style={{ fontSize: '0.8rem' }}>
+                🎥 Live Video Verified ({inspectedLot.videoDuration || 30}s)
               </span>
             </div>
 
-            {/* Main High-Res Image View with Navigation */}
-            <div style={{ position: 'relative', width: '100%', height: '380px', borderRadius: '12px', overflow: 'hidden', background: '#0f172a', marginBottom: '14px' }}>
-              <img 
-                src={(inspectedLot.images || [inspectedLot.image])[inspectedPhotoIndex]} 
-                alt="Inspection angle"
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
+            {/* Main Video Stream or Image View */}
+            {inspectedLot.videoUrl ? (
+              <div style={{ position: 'relative', width: '100%', height: '360px', borderRadius: '12px', overflow: 'hidden', background: '#0f172a', marginBottom: '14px' }}>
+                <video src={inspectedLot.videoUrl} controls autoPlay loop muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', top: '10px', right: '10px', background: '#10b981', color: '#fff', fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px', borderRadius: '12px' }}>
+                  AI Verified Live Field Video
+                </div>
+              </div>
+            ) : (
+              <div style={{ position: 'relative', width: '100%', height: '380px', borderRadius: '12px', overflow: 'hidden', background: '#0f172a', marginBottom: '14px' }}>
+                <img 
+                  src={(inspectedLot.images || [inspectedLot.image])[inspectedPhotoIndex]} 
+                  alt="Inspection angle"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
 
               {/* Prev / Next arrows */}
               <button
@@ -485,8 +520,9 @@ export const BuyerMarketplace = () => {
                 {angleTitles[inspectedPhotoIndex]}
               </div>
             </div>
+          )}
 
-            {/* 4 Thumbnails Selector Bar */}
+          {/* 4 Thumbnails Selector Bar */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
               {(inspectedLot.images || [inspectedLot.image]).slice(0, 4).map((img, i) => (
                 <div

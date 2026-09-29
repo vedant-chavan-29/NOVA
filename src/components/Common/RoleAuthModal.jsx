@@ -51,8 +51,8 @@ const RoleAuthModalContent = () => {
     if (authDefaultTab) setAuthTab(authDefaultTab);
   }, [authDefaultRole, authDefaultTab]);
   
-  // Login State - Supports Email (Instant, zero hassle) and Mobile SMS
-  const [authMethod, setAuthMethod] = useState('email'); // 'email' | 'phone'
+  // Login State - Mobile Phone SMS (Clean 10-digit login)
+  const [authMethod, setAuthMethod] = useState('phone'); // 'phone'
   const [loginStep, setLoginStep] = useState('phone'); // 'phone' | 'otp'
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -65,8 +65,8 @@ const RoleAuthModalContent = () => {
   const [otpError, setOtpError] = useState('');
   const [countdown, setCountdown] = useState(0);
 
-  // Registration State - Supports Email or Mobile
-  const [regAuthMethod, setRegAuthMethod] = useState('email'); // 'email' | 'phone'
+  // Registration State - Mobile Phone First
+  const [regAuthMethod, setRegAuthMethod] = useState('phone'); // 'phone'
   const [regStep, setRegStep] = useState('form'); // 'form' | 'otp'
   const [regData, setRegData] = useState({
     name: '',
@@ -204,7 +204,7 @@ const RoleAuthModalContent = () => {
   };
 
   // -------------------------------------------------------------------------
-  // LOGIN FLOW: Email or Real/Simulated SMS OTP generation & delivery
+  // LOGIN FLOW: Mobile SMS OTP generation & delivery
   // -------------------------------------------------------------------------
   const handleSendLoginOtp = async (e, forceDemo = false) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -215,45 +215,7 @@ const RoleAuthModalContent = () => {
     setEmailPreview(null);
 
     try {
-      // FLOW 1: Instant Zero-Friction Email OTP
-      if (authMethod === 'email') {
-        const cleanEmail = email.trim().toLowerCase();
-        if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-          setEmailError(lang === 'mr' 
-            ? 'कृपया वैध ईमेल पत्ता टाका (उदा. yourname@gmail.com).' 
-            : 'Please enter a valid email address (e.g. yourname@gmail.com).');
-          return;
-        }
-
-        // Check if user has an existing account with this email
-        const existing = findRegisteredUser ? findRegisteredUser(cleanEmail) : null;
-        if (existing && existing.role && existing.role !== selectedRole && selectedRole !== 'admin') {
-          setSelectedRole(existing.role);
-        }
-
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        setRealtimeOtp(code);
-        setEnteredOtp('');
-        setCountdown(60);
-
-        setIsSendingEmail(true);
-        const emailResult = await sendEmailOtp(cleanEmail, code, selectedRole);
-        setIsSendingEmail(false);
-        if (emailResult && emailResult.preview) {
-          setEmailPreview(emailResult.preview);
-        }
-
-        setLoginStep('otp');
-        pushNotification(
-          "AgriLink Verification Code",
-          `Security OTP [ ${code} ] generated for ${cleanEmail}. Click auto-fill to enter dashboard!`,
-          `ईमेल OTP: ${code}`,
-          "info"
-        );
-        return;
-      }
-
-      // FLOW 2: Mobile Phone SMS (Clean, no dead-end prompts)
+      // Mobile Phone SMS
       const clean = phone.replace(/\D/g, '').slice(0, 10);
 
       if (clean.length !== 10) {
@@ -266,6 +228,15 @@ const RoleAuthModalContent = () => {
       const currentKey = getFast2SMSApiKey();
 
       const existing = findRegisteredUser ? findRegisteredUser(clean) : null;
+
+      // REQUIREMENT: Only registered users in the database can log in directly!
+      if (!existing && selectedRole !== 'admin') {
+        setPhoneError(lang === 'mr' 
+          ? `मोबाईल क्रमांक +91 ${clean} डेटाबेसमध्ये नोंदणीकृत नाही. कृपया आधी नवीन नोंदणी करा.` 
+          : `Mobile number +91 ${clean} is not registered in our database. Only registered users can log in directly. Please register first.`);
+        return;
+      }
+
       if (existing && existing.role && existing.role !== selectedRole && selectedRole !== 'admin') {
         setSelectedRole(existing.role);
       }
@@ -317,9 +288,8 @@ const RoleAuthModalContent = () => {
       }
     } catch (err) {
       console.error("Login OTP dispatch error:", err);
-      setIsSendingEmail(false);
       setIsSendingSms(false);
-      setEmailError(err.message || 'Error generating OTP. Please try again.');
+      setPhoneError(err.message || 'Error generating OTP. Please try again.');
     }
   };
 
@@ -335,17 +305,15 @@ const RoleAuthModalContent = () => {
     }
 
     if (cleanOtp !== realtimeOtp) {
-      const dest = authMethod === 'email' ? email : `+91 ${phone}`;
       setOtpError(lang === 'mr' 
-        ? 'चुकीचा OTP! कृपया आपल्या ईमेल/मोबाईलवर आलेला खरा OTP टाका.' 
-        : `Invalid OTP! Please enter the 6-digit OTP generated for ${dest}.`);
+        ? 'चुकीचा OTP! कृपया आपल्या मोबाईलवर आलेला खरा OTP टाका.' 
+        : `Invalid OTP! Please enter the 6-digit OTP generated for +91 ${phone}.`);
       return;
     }
 
     try {
-      // OTP matched! Log into website
-      const identifier = authMethod === 'email' ? email.trim().toLowerCase() : phone;
-      const res = loginWithPhone(selectedRole, identifier);
+      // OTP matched! Log into website using phone
+      const res = loginWithPhone(selectedRole, phone);
       if (res && res.success === false) {
         setOtpError(res.error || 'Failed to authenticate');
       }
@@ -712,667 +680,391 @@ const RoleAuthModalContent = () => {
           </div>
 
           {/* ============================================================== */}
-          {/* TAB 1: LOGIN FLOW (Strict 10-digit number & Real-Time OTP)     */}
+          {/* TAB 1: LOGIN FLOW (Strict 10-digit Mobile Number & SMS OTP)    */}
           {/* ============================================================== */}
           {authTab === 'login' && (
             <div>
-              {/* STEP 1: Method Selector & Input (Email or Mobile) */}
+              {/* STEP 1: 10-Digit Mobile Number Entry */}
               {loginStep === 'phone' && (
                 <form onSubmit={handleSendLoginOtp}>
-                  {/* Auth Method Selector Toggle */}
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                  {/* SMS Gateway Status Indicator */}
+                  <div style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    marginBottom: '14px',
+                    background: fast2smsKey ? '#f0fdf4' : '#fffbeb',
+                    border: fast2smsKey ? '1px solid #bbf7d0' : '1px solid #fde68a',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '0.76rem'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: fast2smsKey ? '#22c55e' : '#f59e0b',
+                        boxShadow: fast2smsKey ? '0 0 6px #22c55e' : 'none',
+                        display: 'inline-block'
+                      }} />
+                      <span style={{ fontWeight: 700, color: fast2smsKey ? '#15803d' : '#92400e' }}>
+                        {fast2smsKey ? 'Fast2SMS Ready (Real Cellular SMS)' : 'Instant Simulation Mode (Zero Gateway Setup Needed)'}
+                      </span>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => { setAuthMethod('email'); setPhoneError(''); setEmailError(''); }}
+                      onClick={() => setShowKeyPrompt(!showKeyPrompt)}
                       style={{
-                        flex: 1,
-                        padding: '10px 12px',
-                        borderRadius: '10px',
-                        border: authMethod === 'email' ? `2px solid ${currentRoleObj.color}` : '1px solid #cbd5e1',
-                        background: authMethod === 'email' ? currentRoleObj.lightBg : '#ffffff',
-                        color: authMethod === 'email' ? currentRoleObj.color : '#64748b',
-                        fontWeight: 800,
-                        fontSize: '0.84rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: fast2smsKey ? '#15803d' : '#b45309',
+                        fontWeight: 700,
+                        fontSize: '0.74rem',
                         cursor: 'pointer',
-                        transition: 'all 0.15s'
+                        textDecoration: 'underline'
                       }}
                     >
-                      <Mail size={16} color={authMethod === 'email' ? currentRoleObj.color : '#64748b'} />
-                      <span>{lang === 'mr' ? 'ईमेल OTP (विनामूल्य व जलद)' : 'Email OTP (Instant • No Setup)'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => { setAuthMethod('phone'); setPhoneError(''); setEmailError(''); }}
-                      style={{
-                        flex: 1,
-                        padding: '10px 12px',
-                        borderRadius: '10px',
-                        border: authMethod === 'phone' ? `2px solid ${currentRoleObj.color}` : '1px solid #cbd5e1',
-                        background: authMethod === 'phone' ? currentRoleObj.lightBg : '#ffffff',
-                        color: authMethod === 'phone' ? currentRoleObj.color : '#64748b',
-                        fontWeight: 800,
-                        fontSize: '0.84rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s'
-                      }}
-                    >
-                      <Smartphone size={16} color={authMethod === 'phone' ? currentRoleObj.color : '#64748b'} />
-                      <span>{lang === 'mr' ? 'मोबाईल SMS' : 'Mobile SMS'}</span>
+                      {fast2smsKey ? 'Edit Key' : 'Configure Key'}
                     </button>
                   </div>
 
-                  {/* -------------------- METHOD A: EMAIL LOGIN -------------------- */}
-                  {authMethod === 'email' && (
-                    <div>
-                      <div style={{ marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <label style={{ fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>
-                            {lang === 'mr' ? 'आपला ईमेल पत्ता टाका' : 'Enter Your Email Address'} *
-                          </label>
-                          <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700, background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>
-                            ✓ Zero Telecom Delay
-                          </span>
-                        </div>
-
-                        <div style={{ position: 'relative', display: 'flex' }}>
-                          <span style={{
-                            background: '#f1f5f9',
-                            border: '1px solid #cbd5e1',
-                            borderRight: 'none',
-                            borderRadius: '10px 0 0 10px',
-                            padding: '11px 12px',
-                            color: '#64748b',
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}>
-                            <Mail size={16} />
-                          </span>
-                          <input
-                            type="email"
-                            required
-                            placeholder="e.g. yourname@gmail.com"
-                            value={email}
-                            onChange={(e) => {
-                              setEmail(e.target.value);
-                              setEmailError('');
-                            }}
-                            autoFocus
-                            style={{
-                              flex: 1,
-                              padding: '11px 12px',
-                              borderRadius: '0 10px 10px 0',
-                              border: emailError ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
-                              fontSize: '0.94rem',
-                              outline: 'none',
-                              boxSizing: 'border-box'
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Email Error Alert */}
-                      {emailError && (
-                        <div style={{
-                          background: '#fef2f2',
-                          border: '1px solid #fca5a5',
-                          borderRadius: '10px',
-                          padding: '12px',
-                          marginBottom: '16px',
-                          fontSize: '0.82rem',
-                          color: '#991b1b',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}>
-                          <AlertCircle size={16} color="#dc2626" />
-                          <span>{emailError}</span>
-                        </div>
-                      )}
-
-                      {/* Quick Test Demo Emails */}
-                      <div style={{
-                        background: '#f8fafc',
-                        borderRadius: '10px',
-                        padding: '10px 12px',
-                        marginBottom: '18px',
-                        border: '1px dashed #cbd5e1'
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label style={{ fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>
+                        {lang === 'mr' ? 'आपला १० अंकी मोबाईल क्रमांक' : 'Enter 10-Digit Mobile Number'} *
+                      </label>
+                      <span style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: phone.length === 10 ? '#dcfce7' : '#fef3c7',
+                        color: phone.length === 10 ? '#15803d' : '#b45309',
+                        border: phone.length === 10 ? '1px solid #86efac' : '1px solid #fde68a'
                       }}>
-                        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
-                          {lang === 'mr' ? 'किंवा चाचणीसाठी डेमो ईमेल निवडा:' : 'Quick Demo Accounts (Or type your OWN personal email):'}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('farmer');
-                              setEmail('farmer.patil@agrilink.in');
-                              setEmailError('');
-                            }}
-                            style={{
-                              background: email === 'farmer.patil@agrilink.in' ? '#dcfce7' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#15803d',
-                              fontWeight: 600
-                            }}
-                          >
-                            👨‍🌾 farmer.patil@agrilink.in
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('buyer');
-                              setEmail('buyer.deshmukh@agrilink.in');
-                              setEmailError('');
-                            }}
-                            style={{
-                              background: email === 'buyer.deshmukh@agrilink.in' ? '#e0f2fe' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#0369a1',
-                              fontWeight: 600
-                            }}
-                          >
-                            🏢 buyer.deshmukh@agrilink.in
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('transporter');
-                              setEmail('transporter.shinde@agrilink.in');
-                              setEmailError('');
-                            }}
-                            style={{
-                              background: email === 'transporter.shinde@agrilink.in' ? '#fef3c7' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#b45309',
-                              fontWeight: 600
-                            }}
-                          >
-                            🚚 transporter.shinde@agrilink.in
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('cold_storage');
-                              setEmail('operations@sahyadricoldchain.com');
-                              setEmailError('');
-                            }}
-                            style={{
-                              background: email === 'operations@sahyadricoldchain.com' ? '#cffafe' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#0891b2',
-                              fontWeight: 600
-                            }}
-                          >
-                            ❄️ operations@sahyadricoldchain.com
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('admin');
-                              setEmail('vedantkchavan2006@gmail.com');
-                              setEmailError('');
-                            }}
-                            style={{
-                              background: email === 'vedantkchavan2006@gmail.com' ? '#fee2e2' : '#ffffff',
-                              border: '1.5px solid #dc2626',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#991b1b',
-                              fontWeight: 700
-                            }}
-                          >
-                            👑 Admin (vedantkchavan2006@gmail.com)
-                          </button>
-                        </div>
-                      </div>
+                        {phone.length === 10 ? '✓ 10/10 Digits' : `${phone.length}/10 Digits`}
+                      </span>
+                    </div>
 
-                      {/* Email Submit Button */}
-                      <button
-                        type="submit"
-                        disabled={!email.trim() || isSendingEmail}
+                    <div style={{ position: 'relative', display: 'flex' }}>
+                      <span style={{
+                        background: '#f1f5f9',
+                        border: '1px solid #cbd5e1',
+                        borderRight: 'none',
+                        borderRadius: '10px 0 0 10px',
+                        padding: '11px 12px',
+                        fontSize: '0.92rem',
+                        fontWeight: 700,
+                        color: '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <Phone size={15} color="#64748b" />
+                        +91
+                      </span>
+                      <input
+                        type="tel"
+                        required
+                        maxLength={10}
+                        placeholder="Enter your 10-digit mobile number"
+                        value={phone}
+                        onChange={handlePhoneInputChange}
+                        autoFocus
                         style={{
-                          width: '100%',
-                          background: email.trim() ? currentRoleObj.color : '#94a3b8',
-                          color: '#ffffff',
-                          border: 'none',
-                          padding: '13px',
-                          borderRadius: '10px',
-                          fontWeight: 800,
-                          fontSize: '0.95rem',
-                          cursor: email.trim() ? 'pointer' : 'not-allowed',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          boxShadow: email.trim() ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none',
-                          transition: 'all 0.15s'
+                          flex: 1,
+                          padding: '11px 12px',
+                          borderRadius: '0 10px 10px 0',
+                          border: phoneError ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
+                          fontSize: '0.96rem',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                          letterSpacing: '1px',
+                          fontWeight: 600
                         }}
-                      >
-                        <Mail size={18} />
-                        <span>{isSendingEmail ? 'Dispatching OTP...' : (lang === 'mr' ? 'ईमेलवर OTP पाठवा' : 'Send Verification Code to Email')}</span>
-                        <ArrowRight size={18} />
-                      </button>
+                      />
+                    </div>
+                  </div>
+
+                  {/* Error Notification */}
+                  {phoneError && (
+                    <div style={{
+                      background: '#fef2f2',
+                      border: '1px solid #fca5a5',
+                      borderRadius: '10px',
+                      padding: '12px',
+                      marginBottom: '16px',
+                      fontSize: '0.82rem',
+                      color: '#991b1b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <AlertCircle size={16} color="#dc2626" />
+                      <span>{phoneError}</span>
                     </div>
                   )}
 
-                  {/* -------------------- METHOD B: MOBILE SMS LOGIN -------------------- */}
-                  {authMethod === 'phone' && (
-                    <div>
-                      {/* SMS Gateway Status Indicator */}
-                      <div style={{
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        marginBottom: '14px',
-                        background: fast2smsKey ? '#f0fdf4' : '#fffbeb',
-                        border: fast2smsKey ? '1px solid #bbf7d0' : '1px solid #fde68a',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: '0.76rem'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            background: fast2smsKey ? '#22c55e' : '#f59e0b',
-                            boxShadow: fast2smsKey ? '0 0 6px #22c55e' : 'none',
-                            display: 'inline-block'
-                          }} />
-                          <span style={{ fontWeight: 700, color: fast2smsKey ? '#15803d' : '#92400e' }}>
-                            {fast2smsKey ? 'Fast2SMS Ready (Real Cellular SMS)' : 'Instant Simulation Mode (Zero Gateway Setup Needed)'}
-                          </span>
-                        </div>
+                  {/* Demo Quick Test Accounts */}
+                  <div style={{
+                    background: '#f8fafc',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    marginBottom: '18px',
+                    border: '1px dashed #cbd5e1'
+                  }}>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
+                      {lang === 'mr' ? 'किंवा चाचणीसाठी डेमो क्रमांक निवडा:' : 'Demo Test Accounts (Or type your OWN mobile number):'}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRole('farmer');
+                          setPhone('9822014892');
+                          setPhoneError('');
+                        }}
+                        style={{
+                          background: phone === '9822014892' ? '#dcfce7' : '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          color: '#15803d',
+                          fontWeight: 600
+                        }}
+                      >
+                        👨‍🌾 Ramesh Patil (98220 14892)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRole('buyer');
+                          setPhone('9890244100');
+                          setPhoneError('');
+                        }}
+                        style={{
+                          background: phone === '9890244100' ? '#e0f2fe' : '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          color: '#0369a1',
+                          fontWeight: 600
+                        }}
+                      >
+                        🏢 Amit Deshmukh (98902 44100)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRole('transporter');
+                          setPhone('9422390812');
+                          setPhoneError('');
+                        }}
+                        style={{
+                          background: phone === '9422390812' ? '#fef3c7' : '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          color: '#b45309',
+                          fontWeight: 600
+                        }}
+                      >
+                        🚚 Tukaram Shinde (94223 90812)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRole('cold_storage');
+                          setPhone('9765432190');
+                          setPhoneError('');
+                        }}
+                        style={{
+                          background: phone === '9765432190' ? '#cffafe' : '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          color: '#0891b2',
+                          fontWeight: 600
+                        }}
+                      >
+                        ❄️ Balasaheb Kadam (97654 32190)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRole('admin');
+                          setPhone('8482941628');
+                          setPhoneError('');
+                        }}
+                        style={{
+                          background: phone === '8482941628' ? '#fee2e2' : '#ffffff',
+                          border: '1.5px solid #dc2626',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          color: '#991b1b',
+                          fontWeight: 700
+                        }}
+                      >
+                        👑 Admin Vedant Chavan (84829 41628)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Key Setup Prompt when Fast2SMS is needed */}
+                  {showKeyPrompt && (
+                    <div style={{
+                      background: '#fffbeb',
+                      border: '1.5px solid #f59e0b',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '16px',
+                      animation: 'fadeIn 0.2s ease'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#92400e', fontWeight: 800, fontSize: '0.9rem' }}>
+                        <AlertCircle size={18} color="#d97706" />
+                        <span>Optional: Fast2SMS Key for Real Handset Delivery</span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#78350f', lineHeight: 1.5, marginBottom: '12px' }}>
+                        You do not need this key to test! You can use the instant simulation mode. If you want a real SMS sent to your phone, paste your Fast2SMS key below:
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                        <input
+                          type="password"
+                          placeholder="Paste Fast2SMS Authorization Key here"
+                          value={fast2smsKey}
+                          onChange={(e) => setFast2smsKeyState(e.target.value)}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontFamily: 'monospace' }}
+                        />
                         <button
                           type="button"
-                          onClick={() => setShowKeyPrompt(!showKeyPrompt)}
+                          onClick={() => {
+                            handleSaveApiKey();
+                            handleSendLoginOtp();
+                          }}
                           style={{
-                            background: 'transparent',
+                            background: '#15803d',
+                            color: '#ffffff',
                             border: 'none',
-                            color: fast2smsKey ? '#15803d' : '#b45309',
+                            padding: '8px 14px',
+                            borderRadius: '8px',
                             fontWeight: 700,
-                            fontSize: '0.74rem',
+                            fontSize: '0.8rem',
                             cursor: 'pointer',
-                            textDecoration: 'underline'
+                            whiteSpace: 'nowrap'
                           }}
                         >
-                          {fast2smsKey ? 'Edit Key' : 'Configure Key'}
+                          Save Key
                         </button>
                       </div>
-
-                      <div style={{ marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <label style={{ fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>
-                            {lang === 'mr' ? 'आपला १० अंकी मोबाईल क्रमांक' : 'Enter 10-Digit Mobile Number'} *
-                          </label>
-                          <span style={{
-                            fontSize: '0.74rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            background: phone.length === 10 ? '#dcfce7' : '#fef3c7',
-                            color: phone.length === 10 ? '#15803d' : '#b45309',
-                            border: phone.length === 10 ? '1px solid #86efac' : '1px solid #fde68a'
-                          }}>
-                            {phone.length === 10 ? '✓ 10/10 Digits' : `${phone.length}/10 Digits`}
-                          </span>
-                        </div>
-
-                        <div style={{ position: 'relative', display: 'flex' }}>
-                          <span style={{
-                            background: '#f1f5f9',
-                            border: '1px solid #cbd5e1',
-                            borderRight: 'none',
-                            borderRadius: '10px 0 0 10px',
-                            padding: '11px 12px',
-                            fontSize: '0.92rem',
-                            fontWeight: 700,
-                            color: '#475569',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}>
-                            <Phone size={15} color="#64748b" />
-                            +91
-                          </span>
-                          <input
-                            type="tel"
-                            required
-                            maxLength={10}
-                            placeholder="Enter your 10-digit mobile number"
-                            value={phone}
-                            onChange={handlePhoneInputChange}
-                            autoFocus
-                            style={{
-                              flex: 1,
-                              padding: '11px 12px',
-                              borderRadius: '0 10px 10px 0',
-                              border: phoneError ? '1.5px solid #ef4444' : '1px solid #cbd5e1',
-                              fontSize: '0.96rem',
-                              outline: 'none',
-                              boxSizing: 'border-box',
-                              letterSpacing: '1px',
-                              fontWeight: 600
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Error Notification */}
-                      {phoneError && (
-                        <div style={{
-                          background: '#fef2f2',
-                          border: '1px solid #fca5a5',
-                          borderRadius: '10px',
-                          padding: '12px',
-                          marginBottom: '16px',
-                          fontSize: '0.82rem',
-                          color: '#991b1b',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}>
-                          <AlertCircle size={16} color="#dc2626" />
-                          <span>{phoneError}</span>
-                        </div>
-                      )}
-
-                      {/* Demo Quick Test Accounts */}
-                      <div style={{
-                        background: '#f8fafc',
-                        borderRadius: '10px',
-                        padding: '10px 12px',
-                        marginBottom: '18px',
-                        border: '1px dashed #cbd5e1'
-                      }}>
-                        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>
-                          {lang === 'mr' ? 'किंवा चाचणीसाठी डेमो क्रमांक निवडा:' : 'Demo Test Accounts (Or type your OWN mobile number):'}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('farmer');
-                              setPhone('9822014892');
-                              setPhoneError('');
-                            }}
-                            style={{
-                              background: phone === '9822014892' ? '#dcfce7' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#15803d',
-                              fontWeight: 600
-                            }}
-                          >
-                            👨‍🌾 Ramesh Patil (98220 14892)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('buyer');
-                              setPhone('9890244100');
-                              setPhoneError('');
-                            }}
-                            style={{
-                              background: phone === '9890244100' ? '#e0f2fe' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#0369a1',
-                              fontWeight: 600
-                            }}
-                          >
-                            🏢 Amit Deshmukh (98902 44100)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('transporter');
-                              setPhone('9422390812');
-                              setPhoneError('');
-                            }}
-                            style={{
-                              background: phone === '9422390812' ? '#fef3c7' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#b45309',
-                              fontWeight: 600
-                            }}
-                          >
-                            🚚 Tukaram Shinde (94223 90812)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('cold_storage');
-                              setPhone('9765432190');
-                              setPhoneError('');
-                            }}
-                            style={{
-                              background: phone === '9765432190' ? '#cffafe' : '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#0891b2',
-                              fontWeight: 600
-                            }}
-                          >
-                            ❄️ Balasaheb Kadam (97654 32190)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRole('admin');
-                              setPhone('8482941628');
-                              setPhoneError('');
-                            }}
-                            style={{
-                              background: phone === '8482941628' ? '#fee2e2' : '#ffffff',
-                              border: '1.5px solid #dc2626',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              cursor: 'pointer',
-                              color: '#991b1b',
-                              fontWeight: 700
-                            }}
-                          >
-                            👑 Admin Vedant Chavan (84829 41628)
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Key Setup Prompt when Fast2SMS is needed */}
-                      {showKeyPrompt && (
-                        <div style={{
-                          background: '#fffbeb',
-                          border: '1.5px solid #f59e0b',
-                          borderRadius: '12px',
-                          padding: '16px',
-                          marginBottom: '16px',
-                          animation: 'fadeIn 0.2s ease'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#92400e', fontWeight: 800, fontSize: '0.9rem' }}>
-                            <AlertCircle size={18} color="#d97706" />
-                            <span>Optional: Fast2SMS Key for Real Handset Delivery</span>
-                          </div>
-                          <div style={{ fontSize: '0.8rem', color: '#78350f', lineHeight: 1.5, marginBottom: '12px' }}>
-                            You do not need this key to test! You can use the instant simulation mode, or switch to <strong>Email OTP</strong> above. If you want a real SMS sent to your phone, paste your Fast2SMS key below:
-                          </div>
-                          
-                          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                            <input
-                              type="password"
-                              placeholder="Paste Fast2SMS Authorization Key here"
-                              value={fast2smsKey}
-                              onChange={(e) => setFast2smsKeyState(e.target.value)}
-                              style={{ flex: 1, padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontFamily: 'monospace' }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleSaveApiKey();
-                                handleSendLoginOtp();
-                              }}
-                              style={{
-                                background: '#15803d',
-                                color: '#ffffff',
-                                border: 'none',
-                                padding: '8px 14px',
-                                borderRadius: '8px',
-                                fontWeight: 700,
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              Save Key
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={phone.length !== 10 || isSendingSms}
-                        style={{
-                          width: '100%',
-                          background: phone.length === 10 ? currentRoleObj.color : '#94a3b8',
-                          color: '#ffffff',
-                          border: 'none',
-                          padding: '13px',
-                          borderRadius: '10px',
-                          fontWeight: 800,
-                          fontSize: '0.95rem',
-                          cursor: phone.length === 10 ? 'pointer' : 'not-allowed',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          boxShadow: phone.length === 10 ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none',
-                          transition: 'all 0.15s'
-                        }}
-                      >
-                        <Smartphone size={18} />
-                        <span>{isSendingSms ? 'Sending SMS via Fast2SMS...' : (lang === 'mr' ? 'मोबाईलवर OTP पाठवा' : 'Send OTP via SMS to this Number')}</span>
-                        <ArrowRight size={18} />
-                      </button>
                     </div>
                   )}
+
+                  <button
+                    type="submit"
+                    disabled={phone.length !== 10 || isSendingSms}
+                    style={{
+                      width: '100%',
+                      background: phone.length === 10 ? currentRoleObj.color : '#94a3b8',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '13px',
+                      borderRadius: '10px',
+                      fontWeight: 800,
+                      fontSize: '0.95rem',
+                      cursor: phone.length === 10 ? 'pointer' : 'not-allowed',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: phone.length === 10 ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <Smartphone size={18} />
+                    <span>{isSendingSms ? 'Sending SMS via Fast2SMS...' : (lang === 'mr' ? 'मोबाईलवर OTP पाठवा' : 'Send OTP via SMS to Mobile')}</span>
+                    <ArrowRight size={18} />
+                  </button>
                 </form>
               )}
 
               {/* STEP 2: Real-Time OTP Verification Screen */}
               {loginStep === 'otp' && (
                 <form onSubmit={handleVerifyLoginOtp}>
-                  {/* Flow 1: Interactive Email Dispatch Preview Card */}
-                  {authMethod === 'email' && (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                      color: '#f8fafc',
-                      borderRadius: '14px',
-                      padding: '18px',
-                      marginBottom: '20px',
-                      boxShadow: '0 8px 24px rgba(15, 23, 42, 0.3)',
-                      border: '1.5px solid #22c55e',
-                      animation: 'fadeIn 0.2s ease-out'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '10px',
-                          background: '#15803d',
-                          color: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <Mail size={20} />
+                  {/* Mobile SMS Confirmation Card */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                    color: '#f8fafc',
+                    borderRadius: '14px',
+                    padding: '18px',
+                    marginBottom: '20px',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.3)',
+                    border: (gatewayStatus && gatewayStatus.sent) ? '1.5px solid #22c55e' : '1.5px solid #f59e0b',
+                    animation: 'fadeIn 0.2s ease-out'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                      <div style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '10px',
+                        background: (gatewayStatus && gatewayStatus.sent) ? '#16a34a' : '#0284c7',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Smartphone size={20} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#f8fafc' }}>
+                          {gatewayStatus && gatewayStatus.sent 
+                            ? (lang === 'mr' ? 'मोबाईलवर खरा SMS पाठवला आहे' : 'Cellular SMS Dispatched to Handset') 
+                            : (lang === 'mr' ? 'झटपट SMS OTP पडताळणी' : 'Instant Verification Code Ready')}
                         </div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#f8fafc' }}>
-                            {lang === 'mr' ? 'अधिकृत ईमेल पडताळणी कोड' : 'Official Verification Email Dispatched'}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            To: <strong>{emailPreview?.to || email}</strong> • From: {emailPreview?.from || 'no-reply@agrilink.gov.in'}
-                          </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                          Recipient: +91 {phone}
                         </div>
                       </div>
+                    </div>
 
-                      {/* Email Content Box */}
+                    {/* Instant Simulated Badge */}
+                    {(!gatewayStatus || !gatewayStatus.sent || isDemoMode) && (
                       <div style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        borderRadius: '10px',
-                        padding: '12px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
                         marginBottom: '10px'
                       }}>
-                        <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginBottom: '4px' }}>
-                          Subject: <strong>{emailPreview?.subject || 'Your AgriLink Login Verification Code'}</strong>
+                        <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                          Instant OTP Code for +91 {phone}:
                         </div>
-                        <div style={{ fontSize: '0.84rem', color: '#cbd5e1', marginBottom: '10px' }}>
-                          Use the 6-digit code below to enter your dashboard:
-                        </div>
-
-                        {/* OTP Display & 1-Click Auto Fill */}
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           flexWrap: 'wrap',
-                          gap: '10px',
-                          background: 'rgba(0, 0, 0, 0.35)',
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(74, 222, 128, 0.3)'
+                          gap: '10px'
                         }}>
-                          <div>
-                            <div style={{ fontSize: '0.7rem', color: '#86efac', fontWeight: 700, textTransform: 'uppercase' }}>
-                              Verification OTP Code
-                            </div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '6px', color: '#4ade80' }}>
-                              {realtimeOtp}
-                            </div>
+                          <div style={{
+                            fontSize: '1.4rem',
+                            fontWeight: 900,
+                            letterSpacing: '5px',
+                            color: '#4ade80'
+                          }}>
+                            {realtimeOtp}
                           </div>
-
                           <button
                             type="button"
                             onClick={() => {
@@ -1383,118 +1075,19 @@ const RoleAuthModalContent = () => {
                               background: 'linear-gradient(135deg, #15803d, #16a34a)',
                               color: '#ffffff',
                               border: 'none',
-                              borderRadius: '8px',
-                              padding: '8px 14px',
-                              fontWeight: 800,
-                              fontSize: '0.78rem',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 8px rgba(22, 163, 74, 0.4)'
+                              borderRadius: '6px',
+                              padding: '6px 12px',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
                             }}
                           >
-                            <CheckCircle2 size={14} />
-                            <span>1-Click Auto-fill OTP</span>
+                            Click to Auto-fill Demo OTP
                           </button>
                         </div>
                       </div>
-
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                        <span>Instant delivery • Zero spam delay • Valid for 10 minutes</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Flow 2: Mobile SMS Confirmation Card */}
-                  {authMethod === 'phone' && (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                      color: '#f8fafc',
-                      borderRadius: '14px',
-                      padding: '18px',
-                      marginBottom: '20px',
-                      boxShadow: '0 8px 24px rgba(15, 23, 42, 0.3)',
-                      border: (gatewayStatus && gatewayStatus.sent) ? '1.5px solid #22c55e' : '1.5px solid #f59e0b',
-                      animation: 'fadeIn 0.2s ease-out'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '10px',
-                          background: (gatewayStatus && gatewayStatus.sent) ? '#16a34a' : '#0284c7',
-                          color: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <Smartphone size={20} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#f8fafc' }}>
-                            {gatewayStatus && gatewayStatus.sent 
-                              ? (lang === 'mr' ? 'मोबाईलवर खरा SMS पाठवला आहे' : 'Cellular SMS Dispatched to Handset') 
-                              : (lang === 'mr' ? 'झटपट SMS OTP पडताळणी' : 'Instant Verification Code Ready')}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            Recipient: +91 {phone}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Instant Simulated Badge */}
-                      {(!gatewayStatus || !gatewayStatus.sent || isDemoMode) && (
-                        <div style={{
-                          background: 'rgba(245, 158, 11, 0.15)',
-                          border: '1px solid rgba(245, 158, 11, 0.35)',
-                          borderRadius: '8px',
-                          padding: '10px 12px',
-                          marginBottom: '10px'
-                        }}>
-                          <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginBottom: '6px' }}>
-                            Instant OTP Code for +91 {phone}:
-                          </div>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: '10px'
-                          }}>
-                            <div style={{
-                              fontSize: '1.4rem',
-                              fontWeight: 900,
-                              letterSpacing: '5px',
-                              color: '#4ade80'
-                            }}>
-                              {realtimeOtp}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEnteredOtp(realtimeOtp);
-                                setOtpError('');
-                              }}
-                              style={{
-                                background: 'linear-gradient(135deg, #15803d, #16a34a)',
-                                color: '#ffffff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px 12px',
-                                fontSize: '0.76rem',
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Click to Auto-fill Demo OTP
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   {/* Destination Info & Edit Link */}
                   <div style={{
@@ -1508,9 +1101,7 @@ const RoleAuthModalContent = () => {
                     border: '1px solid #e2e8f0'
                   }}>
                     <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-                      {authMethod === 'email' 
-                        ? (lang === 'mr' ? 'OTP पाठवलेला ईमेल:' : 'OTP Sent to Email:') 
-                        : (lang === 'mr' ? 'OTP पाठवलेला क्रमांक:' : 'OTP Sent to:')} <strong>{authMethod === 'email' ? email : `+91 ${phone}`}</strong>
+                      {lang === 'mr' ? 'OTP पाठवलेला क्रमांक:' : 'OTP Sent to:'} <strong>+91 {phone}</strong>
                     </span>
                     <button
                       type="button"
@@ -1532,16 +1123,14 @@ const RoleAuthModalContent = () => {
                       }}
                     >
                       <Edit3 size={13} />
-                      {authMethod === 'email' ? (lang === 'mr' ? 'ईमेल बदला' : 'Change Email') : (lang === 'mr' ? 'क्रमांक बदला' : 'Change Number')}
+                      {lang === 'mr' ? 'क्रमांक बदला' : 'Change Number'}
                     </button>
                   </div>
 
                   {/* OTP Input Field */}
                   <div style={{ marginBottom: '16px' }}>
                     <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                      {authMethod === 'email' 
-                        ? (lang === 'mr' ? 'ईमेलवरील ६ अंकी OTP कोड टाका' : 'Enter 6-Digit Email Verification Code') 
-                        : (lang === 'mr' ? 'मोबाईलवर आलेला ६ अंकी OTP टाका' : 'Enter 6-Digit Verification OTP from SMS')} *
+                      {lang === 'mr' ? 'मोबाईलवर आलेला ६ अंकी OTP टाका' : 'Enter 6-Digit Verification OTP from SMS'} *
                     </label>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
@@ -1617,9 +1206,7 @@ const RoleAuthModalContent = () => {
                         }}
                       >
                         <RotateCw size={13} />
-                        {authMethod === 'email' 
-                          ? (lang === 'mr' ? 'नवीन ईमेल OTP पाठवा' : 'Resend Email OTP') 
-                          : (lang === 'mr' ? 'नवीन SMS OTP पाठवा' : 'Resend SMS OTP')}
+                        {lang === 'mr' ? 'नवीन SMS OTP पाठवा' : 'Resend SMS OTP'}
                       </button>
                     )}
 
@@ -1664,62 +1251,13 @@ const RoleAuthModalContent = () => {
           )}
 
           {/* ============================================================== */}
-          {/* TAB 2: NEW USER REGISTRATION (Own City Name & SMS to Phone)    */}
+          {/* TAB 2: NEW USER REGISTRATION (Mobile Number & SMS OTP)          */}
           {/* ============================================================== */}
           {authTab === 'register' && (
             <div>
               {/* STEP 1: Registration Details */}
               {regStep === 'form' && (
                 <form onSubmit={handleSendRegOtp}>
-                  {/* Registration Method Selector Toggle */}
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                    <button
-                      type="button"
-                      onClick={() => { setRegAuthMethod('email'); setRegError(''); setRegOtpError(''); }}
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: regAuthMethod === 'email' ? `2px solid ${currentRoleObj.color}` : '1px solid #cbd5e1',
-                        background: regAuthMethod === 'email' ? currentRoleObj.lightBg : '#ffffff',
-                        color: regAuthMethod === 'email' ? currentRoleObj.color : '#64748b',
-                        fontWeight: 800,
-                        fontSize: '0.82rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Mail size={15} color={regAuthMethod === 'email' ? currentRoleObj.color : '#64748b'} />
-                      <span>{lang === 'mr' ? 'ईमेलने नोंदणी करा' : 'Register with Email (Instant)'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => { setRegAuthMethod('phone'); setRegError(''); setRegOtpError(''); }}
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: regAuthMethod === 'phone' ? `2px solid ${currentRoleObj.color}` : '1px solid #cbd5e1',
-                        background: regAuthMethod === 'phone' ? currentRoleObj.lightBg : '#ffffff',
-                        color: regAuthMethod === 'phone' ? currentRoleObj.color : '#64748b',
-                        fontWeight: 800,
-                        fontSize: '0.82rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Smartphone size={15} color={regAuthMethod === 'phone' ? currentRoleObj.color : '#64748b'} />
-                      <span>{lang === 'mr' ? 'मोबाईलने नोंदणी करा' : 'Register with Mobile'}</span>
-                    </button>
-                  </div>
-
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
@@ -1735,73 +1273,52 @@ const RoleAuthModalContent = () => {
                       />
                     </div>
 
-                    {/* Email vs Mobile Input Field */}
-                    {regAuthMethod === 'email' ? (
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                            {lang === 'mr' ? 'ईमेल पत्ता' : 'Email Address'} *
-                          </label>
-                          <span style={{ fontSize: '0.7rem', color: '#15803d', fontWeight: 700 }}>
-                            Instant OTP
-                          </span>
-                        </div>
+                    {/* Mobile Input Field */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                          {lang === 'mr' ? 'मोबाईल क्रमांक' : 'Mobile Number'} *
+                        </label>
+                        <span style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          color: regData.phone.length === 10 ? '#15803d' : '#b45309'
+                        }}>
+                          {regData.phone.length}/10
+                        </span>
+                      </div>
+                      <div style={{ position: 'relative', display: 'flex' }}>
+                        <span style={{
+                          background: '#f1f5f9',
+                          border: '1px solid #cbd5e1',
+                          borderRight: 'none',
+                          borderRadius: '8px 0 0 8px',
+                          padding: '8px 8px',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          color: '#475569'
+                        }}>
+                          +91
+                        </span>
                         <input
-                          type="email"
+                          type="tel"
                           required
-                          placeholder="e.g. yourname@gmail.com"
-                          value={regData.email}
-                          onChange={(e) => setRegData({ ...regData, email: e.target.value })}
-                          style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                          maxLength={10}
+                          placeholder="10-digit number"
+                          value={regData.phone}
+                          onChange={handleRegPhoneChange}
+                          style={{
+                            flex: 1,
+                            padding: '8px 10px',
+                            borderRadius: '0 8px 8px 0',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.88rem',
+                            fontWeight: 600,
+                            boxSizing: 'border-box'
+                          }}
                         />
                       </div>
-                    ) : (
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                            {lang === 'mr' ? 'मोबाईल क्रमांक' : 'Mobile Number'} *
-                          </label>
-                          <span style={{
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            color: regData.phone.length === 10 ? '#15803d' : '#b45309'
-                          }}>
-                            {regData.phone.length}/10
-                          </span>
-                        </div>
-                        <div style={{ position: 'relative', display: 'flex' }}>
-                          <span style={{
-                            background: '#f1f5f9',
-                            border: '1px solid #cbd5e1',
-                            borderRight: 'none',
-                            borderRadius: '8px 0 0 8px',
-                            padding: '8px 8px',
-                            fontSize: '0.84rem',
-                            fontWeight: 700,
-                            color: '#475569'
-                          }}>
-                            +91
-                          </span>
-                          <input
-                            type="tel"
-                            required
-                            maxLength={10}
-                            placeholder="10-digit number"
-                            value={regData.phone}
-                            onChange={handleRegPhoneChange}
-                            style={{
-                              flex: 1,
-                              padding: '8px 10px',
-                              borderRadius: '0 8px 8px 0',
-                              border: '1px solid #cbd5e1',
-                              fontSize: '0.88rem',
-                              fontWeight: 600,
-                              boxSizing: 'border-box'
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
 
                   <div style={{ marginBottom: '12px' }}>
@@ -1880,13 +1397,7 @@ const RoleAuthModalContent = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            if (regAuthMethod === 'email') {
-                              setEmail(regData.email);
-                              setAuthMethod('email');
-                            } else {
-                              setPhone(regData.phone);
-                              setAuthMethod('phone');
-                            }
+                            setPhone(regData.phone);
                             handleSwitchTab('login');
                           }}
                           style={{
@@ -1909,21 +1420,17 @@ const RoleAuthModalContent = () => {
 
                   <button
                     type="submit"
-                    disabled={
-                      (regAuthMethod === 'email' ? !regData.email.trim() : regData.phone.length !== 10) || 
-                      isSendingEmail || 
-                      isSendingSms
-                    }
+                    disabled={regData.phone.length !== 10 || isSendingSms}
                     style={{
                       width: '100%',
-                      background: (regAuthMethod === 'email' ? regData.email.trim() : regData.phone.length === 10) ? currentRoleObj.color : '#94a3b8',
+                      background: regData.phone.length === 10 ? currentRoleObj.color : '#94a3b8',
                       color: '#ffffff',
                       border: 'none',
                       padding: '13px',
                       borderRadius: '10px',
                       fontWeight: 800,
                       fontSize: '0.95rem',
-                      cursor: (regAuthMethod === 'email' ? regData.email.trim() : regData.phone.length === 10) ? 'pointer' : 'not-allowed',
+                      cursor: regData.phone.length === 10 ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1931,17 +1438,8 @@ const RoleAuthModalContent = () => {
                       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)'
                     }}
                   >
-                    {regAuthMethod === 'email' ? (
-                      <>
-                        <Mail size={18} />
-                        <span>{isSendingEmail ? 'Dispatching OTP...' : (lang === 'mr' ? 'ईमेलवर OTP पाठवा' : 'Send Registration OTP to Email')}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Smartphone size={18} />
-                        <span>{isSendingSms ? 'Sending SMS...' : (lang === 'mr' ? 'मोबाईलवर OTP पाठवा' : 'Send Registration OTP via SMS')}</span>
-                      </>
-                    )}
+                    <Smartphone size={18} />
+                    <span>{isSendingSms ? 'Sending SMS...' : (lang === 'mr' ? 'मोबाईलवर OTP पाठवा' : 'Send Registration OTP via SMS')}</span>
                     <ArrowRight size={18} />
                   </button>
                 </form>
@@ -1950,76 +1448,69 @@ const RoleAuthModalContent = () => {
               {/* STEP 2: Registration OTP Verification */}
               {regStep === 'otp' && (
                 <form onSubmit={handleVerifyRegOtp}>
-                  {/* Flow 1: Registration Email Preview Card */}
-                  {regAuthMethod === 'email' && (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                      color: '#f8fafc',
-                      borderRadius: '14px',
-                      padding: '18px',
-                      marginBottom: '20px',
-                      boxShadow: '0 8px 24px rgba(15, 23, 42, 0.3)',
-                      border: '1.5px solid #22c55e',
-                      animation: 'fadeIn 0.2s ease-out'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '10px',
-                          background: '#15803d',
-                          color: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <Mail size={20} />
+                  {/* Registration Mobile SMS Card */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                    color: '#f8fafc',
+                    borderRadius: '14px',
+                    padding: '18px',
+                    marginBottom: '20px',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.3)',
+                    border: (gatewayStatus && gatewayStatus.sent) ? '1.5px solid #22c55e' : '1.5px solid #f59e0b',
+                    animation: 'fadeIn 0.2s ease-out'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                      <div style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '10px',
+                        background: (gatewayStatus && gatewayStatus.sent) ? '#16a34a' : '#0284c7',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Smartphone size={20} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#f8fafc' }}>
+                          {gatewayStatus && gatewayStatus.sent 
+                            ? (lang === 'mr' ? 'नोंदणी SMS पाठवला आहे' : 'Registration SMS Dispatched to Handset') 
+                            : (lang === 'mr' ? 'झटपट नोंदणी पडताळणी' : 'Instant Registration Code Ready')}
                         </div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#f8fafc' }}>
-                            {lang === 'mr' ? 'नोंदणी पडताळणी ईमेल पाठवला' : 'Registration Verification Email Sent'}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            To: <strong>{emailPreview?.to || regData.email}</strong> • From: {emailPreview?.from || 'no-reply@agrilink.gov.in'}
-                          </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                          Recipient: +91 {regData.phone}
                         </div>
                       </div>
+                    </div>
 
-                      {/* Email preview card */}
+                    {/* Instant Simulated Code Badge */}
+                    {(!gatewayStatus || !gatewayStatus.sent || isDemoMode) && (
                       <div style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        borderRadius: '10px',
-                        padding: '12px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
                         marginBottom: '10px'
                       }}>
-                        <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginBottom: '4px' }}>
-                          Subject: <strong>{emailPreview?.subject || 'Your AgriLink Registration Code'}</strong>
+                        <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                          Instant OTP Code for +91 {regData.phone}:
                         </div>
-                        <div style={{ fontSize: '0.84rem', color: '#cbd5e1', marginBottom: '10px' }}>
-                          Welcome to AgriLink! Use this 6-digit code to complete registration for <strong>{regData.name}</strong>:
-                        </div>
-
                         <div style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           flexWrap: 'wrap',
-                          gap: '10px',
-                          background: 'rgba(0, 0, 0, 0.35)',
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(74, 222, 128, 0.3)'
+                          gap: '10px'
                         }}>
-                          <div>
-                            <div style={{ fontSize: '0.7rem', color: '#86efac', fontWeight: 700, textTransform: 'uppercase' }}>
-                              Registration OTP Code
-                            </div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '6px', color: '#4ade80' }}>
-                              {regRealtimeOtp}
-                            </div>
+                          <div style={{
+                            fontSize: '1.4rem',
+                            fontWeight: 900,
+                            letterSpacing: '5px',
+                            color: '#4ade80'
+                          }}>
+                            {regRealtimeOtp}
                           </div>
-
                           <button
                             type="button"
                             onClick={() => {
@@ -2030,120 +1521,24 @@ const RoleAuthModalContent = () => {
                               background: 'linear-gradient(135deg, #15803d, #16a34a)',
                               color: '#ffffff',
                               border: 'none',
-                              borderRadius: '8px',
-                              padding: '8px 14px',
-                              fontWeight: 800,
-                              fontSize: '0.78rem',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 8px rgba(22, 163, 74, 0.4)'
+                              borderRadius: '6px',
+                              padding: '6px 12px',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
                             }}
                           >
-                            <CheckCircle2 size={14} />
-                            <span>1-Click Auto-fill OTP</span>
+                            Click to Auto-fill Demo OTP
                           </button>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Flow 2: Registration Mobile SMS Card */}
-                  {regAuthMethod === 'phone' && (
-                    <div style={{
-                      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                      color: '#f8fafc',
-                      borderRadius: '14px',
-                      padding: '18px',
-                      marginBottom: '20px',
-                      boxShadow: '0 8px 24px rgba(15, 23, 42, 0.3)',
-                      border: (gatewayStatus && gatewayStatus.sent) ? '1.5px solid #22c55e' : '1.5px solid #f59e0b',
-                      animation: 'fadeIn 0.2s ease-out'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '10px',
-                          background: (gatewayStatus && gatewayStatus.sent) ? '#16a34a' : '#0284c7',
-                          color: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <Smartphone size={20} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#f8fafc' }}>
-                            {gatewayStatus && gatewayStatus.sent 
-                              ? (lang === 'mr' ? 'नोंदणी SMS पाठवला आहे' : 'Registration SMS Dispatched to Handset') 
-                              : (lang === 'mr' ? 'झटपट नोंदणी पडताळणी' : 'Instant Registration Code Ready')}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            Recipient: +91 {regData.phone}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Instant Simulated Code Badge */}
-                      {(!gatewayStatus || !gatewayStatus.sent || isDemoMode) && (
-                        <div style={{
-                          background: 'rgba(245, 158, 11, 0.15)',
-                          border: '1px solid rgba(245, 158, 11, 0.35)',
-                          borderRadius: '8px',
-                          padding: '10px 12px',
-                          marginBottom: '10px'
-                        }}>
-                          <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginBottom: '6px' }}>
-                            Instant OTP Code for +91 {regData.phone}:
-                          </div>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: '10px'
-                          }}>
-                            <div style={{
-                              fontSize: '1.4rem',
-                              fontWeight: 900,
-                              letterSpacing: '5px',
-                              color: '#4ade80'
-                            }}>
-                              {regRealtimeOtp}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEnteredRegOtp(regRealtimeOtp);
-                                setRegOtpError('');
-                              }}
-                              style={{
-                                background: 'linear-gradient(135deg, #15803d, #16a34a)',
-                                color: '#ffffff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px 12px',
-                                fontSize: '0.76rem',
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Click to Auto-fill Demo OTP
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <label style={{ fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>
-                        {regAuthMethod === 'email' 
-                          ? (lang === 'mr' ? 'ईमेलवरील ६ अंकी OTP कोड टाका' : 'Enter 6-Digit Email Verification Code') 
-                          : (lang === 'mr' ? 'नोंदणी OTP कोड टाका' : 'Enter 6-Digit Registration OTP from SMS')} *
+                        {lang === 'mr' ? 'नोंदणी OTP कोड टाका' : 'Enter 6-Digit Registration OTP from SMS'} *
                       </label>
                       <button
                         type="button"
@@ -2216,7 +1611,7 @@ const RoleAuthModalContent = () => {
                         style={{ background: 'transparent', border: 'none', color: currentRoleObj.color, fontWeight: 700, cursor: 'pointer', padding: 0 }}
                       >
                         <RotateCw size={13} style={{ display: 'inline', marginRight: '4px' }} />
-                        {regAuthMethod === 'email' ? 'Resend Email OTP' : 'Resend SMS OTP'}
+                        Resend SMS OTP
                       </button>
                     )}
                     <span style={{ color: '#64748b' }}>{enteredRegOtp.length}/6 digits</span>

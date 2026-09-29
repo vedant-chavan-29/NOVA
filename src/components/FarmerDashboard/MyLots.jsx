@@ -206,59 +206,48 @@ export const MyLots = () => {
                   </span>
                 </div>
 
-                {/* 4-Photo Multi-Angle Thumbnail Strip */}
-                <div style={{ marginBottom: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Camera size={13} color="#16a34a" />
-                      <span>4 AI-Inspected Photos:</span>
-                    </span>
-                    <button
-                      onClick={() => { setActivePhotoModalLot(lot); setActivePhotoIndex(0); }}
-                      style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
-                    >
-                      Inspect Full View
-                    </button>
+                {/* Live Video Recording Stream OR Photo Thumbnail Strip */}
+                {lot.videoUrl ? (
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        🎥 <span>Verified Live Video Stream ({lot.videoDuration || 30}s):</span>
+                      </span>
+                      <span className="badge badge-green">AI Video Verified</span>
+                    </div>
+                    <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '8px', overflow: 'hidden', background: '#0f172a' }}>
+                      <video src={lot.videoUrl} controls autoPlay loop muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
                   </div>
+                ) : (
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Camera size={13} color="#16a34a" />
+                        <span>Live Harvest Inspection Stream:</span>
+                      </span>
+                    </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                    {lotImages.slice(0, 4).map((img, i) => (
-                      <div 
-                        key={i}
-                        onClick={() => { setActivePhotoModalLot(lot); setActivePhotoIndex(i); }}
-                        style={{
-                          height: '74px',
-                          borderRadius: '6px',
-                          overflow: 'hidden',
-                          border: '1.5px solid #cbd5e1',
-                          cursor: 'pointer',
-                          position: 'relative',
-                          transition: 'transform 0.15s ease'
-                        }}
-                        title={`Click to view Angle #${i + 1}`}
-                      >
-                        <img 
-                          src={img} 
-                          alt={`${lot.crop} Angle ${i + 1}`} 
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                        <span style={{
-                          position: 'absolute',
-                          bottom: '2px',
-                          left: '2px',
-                          background: 'rgba(15, 23, 42, 0.75)',
-                          color: '#ffffff',
-                          fontSize: '0.6rem',
-                          fontWeight: 800,
-                          padding: '1px 4px',
-                          borderRadius: '3px'
-                        }}>
-                          #{i + 1}
-                        </span>
-                      </div>
-                    ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                      {lotImages.slice(0, 4).map((img, i) => (
+                        <div 
+                          key={i}
+                          onClick={() => { setActivePhotoModalLot(lot); setActivePhotoIndex(i); }}
+                          style={{
+                            height: '74px',
+                            borderRadius: '6px',
+                            overflow: 'hidden',
+                            border: '1.5px solid #cbd5e1',
+                            cursor: 'pointer',
+                            position: 'relative'
+                          }}
+                        >
+                          <img src={img} alt={`${lot.crop} View ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Quality & Specs Pills */}
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
